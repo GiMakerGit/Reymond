@@ -1,9 +1,12 @@
 # Security Policy
 
+The bot does not collect sensitive information like passwords etc
+Only collected information will be your rank score which in this version of the bot is not encrypted and publicly available
+
 ## Supported Versions
 
 Reymond Bot is getting security updates only for the last version of the bot. Please consider regularly reinvite bot to your servers making sure it will remain secure
-Current version isn't secure, continue using bot on your own risk
+Current version doesn't encrypt any data so use it at your own risk
 
 | Version | Supported          |
 | ------- | ------------------ |
