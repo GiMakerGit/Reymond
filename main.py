@@ -165,6 +165,94 @@ async def rating(interaction: discord.Interaction, user: discord.Member):
     
     await interaction.response.send_message(embed=embed)
 
+# Create a View subclass for the pagination buttons
+class PaginationView(discord.ui.View):
+    def __init__(self, page, total_pages):
+        super().__init__(timeout=180)  # 3 minute timeout
+        self.page = page
+        self.total_pages = total_pages
+        
+        # Add buttons
+        if page > 1:
+            self.add_item(discord.ui.Button(label="Previous", custom_id=f"prev_{page}", style=discord.ButtonStyle.primary))
+        if page < total_pages:
+            self.add_item(discord.ui.Button(label="Next", custom_id=f"next_{page}", style=discord.ButtonStyle.primary))
+
+@bot.tree.command(name="top", description="Shows top rated users (10 per page)")
+async def top(interaction: discord.Interaction, page: int = 1):
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    
+    if not guild_ratings:
+        await interaction.response.send_message("No ratings found.")
+        return
+    
+    sorted_ratings = sorted(guild_ratings.items(), key=lambda x: x[1], reverse=True)
+    total_pages = (len(sorted_ratings) + 9) // 10  # Round up division
+    
+    if page < 1 or page > total_pages:
+        await interaction.response.send_message(f"Invalid page number. Please choose between 1 and {total_pages}.", ephemeral=True)
+        return
+    
+    start_idx = (page - 1) * 10
+    end_idx = start_idx + 10
+    page_users = sorted_ratings[start_idx:end_idx]
+    
+    embed = discord.Embed(
+        title="🏆 Top Rated Users",
+        description=f"Page {page}/{total_pages}",
+        color=discord.Color.gold()
+    )
+    
+    for i, (user_id, rating) in enumerate(page_users, start=start_idx + 1):
+        user = interaction.guild.get_member(int(user_id))
+        if user:
+            embed.add_field(
+                name=f"#{i}. {user.name}", 
+                value=f"Rating: {rating}", 
+                inline=False
+            )
+    
+    view = PaginationView(page, total_pages)
+    await interaction.response.send_message(embed=embed, view=view)
+
+@bot.event
+async def on_interaction(interaction: discord.Interaction):
+    if not interaction.data or "custom_id" not in interaction.data:
+        return
+
+    custom_id = interaction.data["custom_id"]
+    if custom_id.startswith(("prev_", "next_")):
+        direction, current_page = custom_id.split("_")
+        current_page = int(current_page)
+        new_page = current_page - 1 if direction == "prev" else current_page + 1
+        
+        # Load ratings and create new embed
+        guild_ratings = load_guild_ratings(interaction.guild_id)
+        sorted_ratings = sorted(guild_ratings.items(), key=lambda x: x[1], reverse=True)
+        total_pages = (len(sorted_ratings) + 9) // 10
+        
+        start_idx = (new_page - 1) * 10
+        end_idx = start_idx + 10
+        page_users = sorted_ratings[start_idx:end_idx]
+        
+        embed = discord.Embed(
+            title="🏆 Top Rated Users",
+            description=f"Page {new_page}/{total_pages}",
+            color=discord.Color.gold()
+        )
+        
+        for i, (user_id, rating) in enumerate(page_users, start=start_idx + 1):
+            user = interaction.guild.get_member(int(user_id))
+            if user:
+                embed.add_field(
+                    name=f"#{i}. {user.name}",
+                    value=f"Rating: {rating}",
+                    inline=False
+                )
+        
+        view = PaginationView(new_page, total_pages)
+        await interaction.response.edit_message(embed=embed, view=view)
+
 @bot.tree.command(name="setupadmin", description="Set up the role that can manage ratings")
 @commands.has_permissions(administrator=True)
 async def setupadmin(interaction: discord.Interaction, role: discord.Role):
