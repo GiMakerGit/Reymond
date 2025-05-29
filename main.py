@@ -1,5 +1,5 @@
-# ©2025 GiMaker Software inc.
-# ©2025 Alogical Std. as a mother company
+# ©2025 Alogical Std.
+# Created by GiMaker
 
 import sys
 sys.path.append('lib')
