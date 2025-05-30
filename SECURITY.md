@@ -10,6 +10,7 @@ Current version doesn't encrypt any data so use it at your own risk
 
 | Version | Supported          |
 | ------- | ------------------ |
+|  1.1  | :x: |
 |  1.0  | :x: |
 | < 1.0   | :x:                |
 
