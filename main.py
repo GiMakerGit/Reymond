@@ -11,6 +11,7 @@ import os
 import json
 from lang_config import LANGUAGES
 import typing
+import signal
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -19,6 +20,7 @@ guild_settings = {}
 admin_roles = {} 
 guild_languages = {}
 DEFAULT_LANG = "en"
+bank_roles = {}
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
@@ -362,6 +364,208 @@ async def setup(interaction: discord.Interaction, rated_role: discord.Role, admi
     
     await interaction.response.send_message(embed=embed)
 
+
+
+@bot.tree.command(name="rank_setuprating", description="Set up the rating system role")
+async def rank_setuprating(interaction: discord.Interaction, role: discord.Role):
+    guild_settings[interaction.guild_id] = role.id
+    save_settings() 
+    await interaction.response.send_message(f"Rating system set up for role: {role.name}")
+    
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    for member in role.members:
+        if str(member.id) not in guild_ratings:
+            guild_ratings[str(member.id)] = 0
+    save_ratings(interaction.guild_id, guild_ratings)
+
+@bot.tree.command(name="rank_addrating", description="Add rating points to a user")
+async def rank_addrating(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if interaction.guild_id not in admin_roles:
+        await interaction.response.send_message("Admin role not set up! Ask an administrator to use /rank_setupadmin first.", ephemeral=True)
+        return
+
+    admin_role = interaction.guild.get_role(admin_roles[interaction.guild_id])
+    if admin_role not in interaction.user.roles:
+        await interaction.response.send_message("You don't have permission to use this command!", ephemeral=True)
+        return
+
+    if interaction.guild_id not in guild_settings:
+        await interaction.response.send_message("Rating system not set up! Use /rank_setuprating first.", ephemeral=True)
+        return
+        
+    role = interaction.guild.get_role(guild_settings[interaction.guild_id])
+    if role not in user.roles:
+        await interaction.response.send_message(f"{user.name} doesn't have the required role!", ephemeral=True)
+        return
+    
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    if str(user.id) not in guild_ratings:
+        guild_ratings[str(user.id)] = 0
+    
+    guild_ratings[str(user.id)] += amount
+    save_ratings(interaction.guild_id, guild_ratings)
+    
+    await interaction.response.send_message(
+        f"✨ Added {amount} points to {user.name}'s rating. New rating: {guild_ratings[str(user.id)]}"
+    )
+
+@bot.tree.command(name="rank_rmrating", description="Remove rating points from a user")
+async def rank_rmrating(interaction: discord.Interaction, user: discord.Member, amount: int):
+    if interaction.guild_id not in admin_roles:
+        await interaction.response.send_message("Admin role not set up! Ask an administrator to use /rank_setupadmin first.", ephemeral=True)
+        return
+    
+    admin_role = interaction.guild.get_role(admin_roles[interaction.guild_id])
+    if admin_role not in interaction.user.roles:
+        await interaction.response.send_message("You don't have permission to use this command!", ephemeral=True)
+        return
+
+    if interaction.guild_id not in guild_settings:
+        await interaction.response.send_message("Rating system not set up! Use /rank_setuprating first.", ephemeral=True)
+        return
+        
+    role = interaction.guild.get_role(guild_settings[interaction.guild_id])
+    if role not in user.roles:
+        await interaction.response.send_message(f"{user.name} doesn't have the required role!", ephemeral=True)
+        return
+    
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    if str(user.id) not in guild_ratings:
+        guild_ratings[str(user.id)] = 0
+    
+    guild_ratings[str(user.id)] -= amount
+    save_ratings(interaction.guild_id, guild_ratings)
+    
+    await interaction.response.send_message(
+        f"📉 Removed {amount} points from {user.name}'s rating. New rating: {guild_ratings[str(user.id)]}"
+    )
+
+@bot.tree.command(name="rank_rating", description="Check user's rating")
+async def rank_rating(interaction: discord.Interaction, user: discord.Member):
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    
+    if str(user.id) not in guild_ratings:
+        await interaction.response.send_message(
+            get_text(interaction.guild_id, "user_no_rating", user=user.name)
+        )
+        return
+    
+    embed = discord.Embed(
+        title=get_text(interaction.guild_id, "rating_info_title"),
+        color=discord.Color.blue()
+    )
+    embed.add_field(
+        name=get_text(interaction.guild_id, "user_field", user=user.name), 
+        value=user.mention, 
+        inline=True
+    )
+    embed.add_field(
+        name=get_text(interaction.guild_id, "rating_field"), 
+        value=get_text(
+            interaction.guild_id, 
+            "rating_display", 
+            rating=guild_ratings[str(user.id)]
+        ), 
+        inline=True
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    
+    await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="rank_top", description="Shows top rated users (10 per page)")
+async def rank_top(interaction: discord.Interaction, page: int = 1):
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    
+    if not guild_ratings:
+        await interaction.response.send_message(get_text(interaction.guild_id, "no_ratings"))
+        return
+    
+    sorted_ratings = sorted(guild_ratings.items(), key=lambda x: x[1], reverse=True)
+    total_pages = (len(sorted_ratings) + 9) // 10  
+    
+    if page < 1 or page > total_pages:
+        await interaction.response.send_message(
+            get_text(interaction.guild_id, "invalid_page", total_pages=total_pages),
+            ephemeral=True
+        )
+        return
+    
+    start_idx = (page - 1) * 10
+    end_idx = start_idx + 10
+    page_users = sorted_ratings[start_idx:end_idx]
+    
+    embed = discord.Embed(
+        title=get_text(interaction.guild_id, "top_users_title"),
+        description=get_text(interaction.guild_id, "page_display", current=page, total=total_pages),
+        color=discord.Color.gold()
+    )
+    
+    for i, (user_id, rating) in enumerate(page_users, start=start_idx + 1):
+        user = interaction.guild.get_member(int(user_id))
+        if user:
+            embed.add_field(
+                name=f"#{i}. {user.name}",
+                value=get_text(interaction.guild_id, "rating_display", rating=rating),
+                inline=False
+            )
+    
+    view = PaginationView(page, total_pages, interaction.guild_id)
+    await interaction.response.send_message(embed=embed, view=view)
+
+@bot.tree.command(name="rank_setupadmin", description="Set up the role that can manage ratings")
+@commands.has_permissions(administrator=True)
+async def rank_setupadmin(interaction: discord.Interaction, role: discord.Role):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message("Only administrators can use this command!", ephemeral=True)
+        return
+
+    admin_roles[interaction.guild_id] = role.id
+    save_settings()  # <-- Save after change
+    await interaction.response.send_message(f"Rating management role set to: {role.name}")
+
+@bot.tree.command(name="rank_setup", description="Set up the rating system and admin roles")
+@commands.has_permissions(administrator=True)
+async def rank_setup(interaction: discord.Interaction, rated_role: discord.Role, admin_role: discord.Role):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(get_text(interaction.guild_id, "no_permission"), ephemeral=True)
+        return
+
+    guild_settings[interaction.guild_id] = rated_role.id
+    admin_roles[interaction.guild_id] = admin_role.id
+    save_settings()  # <-- Save after change
+    
+    guild_ratings = load_guild_ratings(interaction.guild_id)
+    for member in rated_role.members:
+        if str(member.id) not in guild_ratings:
+            guild_ratings[str(member.id)] = 0
+    save_ratings(interaction.guild_id, guild_ratings)
+
+    embed = discord.Embed(
+        title="⚙️ Rating System Setup",
+        description="System configuration has been updated",
+        color=discord.Color.green()
+    )
+    
+    embed.add_field(
+        name="📊 Rated Role",
+        value=f"{rated_role.mention}\nMembers with this role can receive ratings",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="👑 Admin Role",
+        value=f"{admin_role.mention}\nMembers with this role can manage ratings",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="ℹ️ Status",
+        value="✅ Setup completed successfully\n📝 Initial ratings have been initialized",
+        inline=False
+    )
+    
+    await interaction.response.send_message(embed=embed)
+
 def load_language_settings():
     """Load language settings from file"""
     if not os.path.exists('config'):
@@ -488,8 +692,8 @@ def get_card_by_userid(bank, user_id):
 
 @bot.tree.command(name="bank_createcard", description="Create a bank card (for citizens)")
 async def bank_createcard(interaction: discord.Interaction, nickname: str):
-    citizen_role = discord.utils.get(interaction.user.roles, name=CITIZEN_ROLE_NAME)
-    if not citizen_role:
+    citizen_role = get_citizen_role(interaction.guild)
+    if not citizen_role or citizen_role not in interaction.user.roles:
         await interaction.response.send_message("You must have the citizen role to create a card.", ephemeral=True)
         return
 
@@ -568,8 +772,8 @@ async def bank_transfer(interaction: discord.Interaction, amount: int, to_card_o
 
 @bot.tree.command(name="bank_topup", description="Top up a player's account (banker only)")
 async def bank_topup(interaction: discord.Interaction, amount: int, card_or_nickname: str):
-    banker_role = discord.utils.get(interaction.user.roles, name=BANKER_ROLE_NAME)
-    if not banker_role:
+    banker_role = get_banker_role(interaction.guild)
+    if not banker_role or banker_role not in interaction.user.roles:
         await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
         return
 
@@ -590,8 +794,8 @@ async def bank_topup(interaction: discord.Interaction, amount: int, card_or_nick
 
 @bot.tree.command(name="bank_block", description="Block a player's account (banker only)")
 async def bank_block(interaction: discord.Interaction, card_or_nickname: str):
-    banker_role = discord.utils.get(interaction.user.roles, name=BANKER_ROLE_NAME)
-    if not banker_role:
+    banker_role = get_banker_role(interaction.guild)
+    if not banker_role or banker_role not in interaction.user.roles:
         await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
         return
 
@@ -607,7 +811,54 @@ async def bank_block(interaction: discord.Interaction, card_or_nickname: str):
     save_bank(bank)
     await interaction.response.send_message(f"Card {card} has been blocked.", ephemeral=True)
 
-@bot.tree.command(name="bank_list", description="List of all cards (banker only)")
+@bot.tree.command(name="bank_unlock", description="Unlock a blocked card (banker only)")
+async def bank_unlock(interaction: discord.Interaction, card_or_nickname: str):
+    banker_role = get_banker_role(interaction.guild)
+    if not banker_role or banker_role not in interaction.user.roles:
+        await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
+        return
+
+    bank = load_bank()
+    card, info = bank.get(card_or_nickname), bank.get(card_or_nickname)
+    if not info:
+        card, info = get_card_by_nickname(bank, card_or_nickname)
+    if not info:
+        await interaction.response.send_message("Card not found.", ephemeral=True)
+        return
+
+    if not info["blocked"]:
+        await interaction.response.send_message("Card is not blocked.", ephemeral=True)
+        return
+
+    info["blocked"] = False
+    save_bank(bank)
+    await interaction.response.send_message(f"Card {card} has been unlocked.", ephemeral=True)
+
+@bot.tree.command(name="bank_delete", description="Delete a card (user or banker)")
+async def bank_delete(interaction: discord.Interaction, card_or_nickname: str = None):
+    bank = load_bank()
+    banker_role = discord.utils.get(interaction.user.roles, name=BANKER_ROLE_NAME)
+    if card_or_nickname:
+        card, info = bank.get(card_or_nickname), bank.get(card_or_nickname)
+        if not info:
+            card, info = get_card_by_nickname(bank, card_or_nickname)
+        if not info:
+            await interaction.response.send_message("Card not found.", ephemeral=True)
+            return
+        if not banker_role and info["user_id"] != str(interaction.user.id):
+            await interaction.response.send_message("You can only delete your own card.", ephemeral=True)
+            return
+    else:
+        card, info = get_card_by_userid(bank, interaction.user.id)
+        if not info:
+            await interaction.response.send_message("You don't have a card to delete.", ephemeral=True)
+            return
+
+    del bank[card]
+    save_bank(bank)
+    await interaction.response.send_message(f"Card {card} has been deleted.", ephemeral=True)
+
+@bot.tree.command(name="bank_list", description="List all cards (banker only)")
 async def bank_list(interaction: discord.Interaction):
     banker_role = discord.utils.get(interaction.user.roles, name=BANKER_ROLE_NAME)
     if not banker_role:
@@ -615,10 +866,62 @@ async def bank_list(interaction: discord.Interaction):
         return
 
     bank = load_bank()
+    if not bank:
+        await interaction.response.send_message("No cards found.", ephemeral=True)
+        return
+
     msg = "All cards:\n"
     for card, info in bank.items():
         status = "Blocked" if info["blocked"] else "Active"
         msg += f"Card: {card}, Nickname: {info['nickname']}, Balance: {info['balance']}, Status: {status}\n"
     await interaction.response.send_message(msg, ephemeral=True)
+
+@bot.tree.command(name="bank_setroles", description="Set banker and citizen roles for the banking system")
+@commands.has_permissions(administrator=True)
+async def bank_setroles(
+    interaction: discord.Interaction,
+    banker_role: discord.Role,
+    citizen_role: discord.Role
+):
+    if "bank_roles" not in guild_settings:
+        guild_settings["bank_roles"] = {}
+    guild_settings["bank_roles"][str(interaction.guild_id)] = {
+        "banker_role_id": banker_role.id,
+        "citizen_role_id": citizen_role.id
+    }
+    save_settings()
+    
+    bank_roles[str(interaction.guild_id)] = {
+        "banker_role_id": banker_role.id,
+        "citizen_role_id": citizen_role.id
+    }
+    await interaction.response.send_message(
+        f"Banker role set to: {banker_role.mention}\nCitizen role set to: {citizen_role.mention}",
+        ephemeral=True
+    )
+
+
+def get_banker_role(guild):
+    roles = bank_roles.get(str(guild.id)) or guild_settings.get("bank_roles", {}).get(str(guild.id), {})
+    return guild.get_role(roles.get("banker_role_id"))
+
+def get_citizen_role(guild):
+    roles = bank_roles.get(str(guild.id)) or guild_settings.get("bank_roles", {}).get(str(guild.id), {})
+    return guild.get_role(roles.get("citizen_role_id"))
+
+
+def initialize_bank_roles():
+    global bank_roles
+    bank_roles = guild_settings.get("bank_roles", {}).copy()
+
+
+
+def graceful_shutdown(*args):
+    save_settings()
+    print("Bot data saved. Shutting down.")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, graceful_shutdown)  
+signal.signal(signal.SIGTERM, graceful_shutdown) 
 
 bot.run(token)
