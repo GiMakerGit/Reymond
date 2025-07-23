@@ -694,13 +694,21 @@ def get_card_by_userid(bank, user_id):
 async def bank_createcard(interaction: discord.Interaction, nickname: str):
     citizen_role = get_citizen_role(interaction.guild)
     if not citizen_role or citizen_role not in interaction.user.roles:
-        await interaction.response.send_message("You must have the citizen role to create a card.", ephemeral=True)
+        embed = discord.Embed(
+            description="You must have the citizen role to create a card.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     bank = load_bank()
     card, _ = get_card_by_userid(bank, interaction.user.id)
     if card:
-        await interaction.response.send_message(f"You already have a card: {card}", ephemeral=True)
+        embed = discord.Embed(
+            description=f"You already have a card: {card}",
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     card_number = str(100000 + len(bank))
@@ -711,16 +719,31 @@ async def bank_createcard(interaction: discord.Interaction, nickname: str):
         "blocked": False
     }
     save_bank(bank)
-    await interaction.response.send_message(f"Card created! Your card number: {card_number}", ephemeral=True)
+    embed = discord.Embed(
+        title="Card Created!",
+        description=f"Your card number: `{card_number}`",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_mycard", description="Find out your card number")
 async def bank_mycard(interaction: discord.Interaction):
     bank = load_bank()
     card, info = get_card_by_userid(bank, interaction.user.id)
     if card:
-        await interaction.response.send_message(f"Your card number: {card}\nNickname: {info['nickname']}", ephemeral=True)
+        embed = discord.Embed(
+            title="Your Card",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="Card Number", value=f"`{card}`", inline=False)
+        embed.add_field(name="Nickname", value=info['nickname'], inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
-        await interaction.response.send_message("You don't have a card yet. Use /bank_createcard to get one.", ephemeral=True)
+        embed = discord.Embed(
+            description="You don't have a card yet. Use `/bank_createcard` to get one.",
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_balance", description="View balance (by card number or nickname)")
 async def bank_balance(interaction: discord.Interaction, card_or_nickname: str = None):
@@ -733,48 +756,93 @@ async def bank_balance(interaction: discord.Interaction, card_or_nickname: str =
             card, info = get_card_by_nickname(bank, card_or_nickname)
     if info:
         if info["blocked"]:
-            await interaction.response.send_message("This account is blocked.", ephemeral=True)
+            embed = discord.Embed(
+                description="This account is blocked.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            await interaction.response.send_message(f"Balance for card {card}: {info['balance']}", ephemeral=True)
+            embed = discord.Embed(
+                title="Account Balance",
+                color=discord.Color.gold()
+            )
+            embed.add_field(name="Card Number", value=f"`{card}`", inline=True)
+            embed.add_field(name="Balance", value=f"{info['balance']}", inline=True)
+            embed.add_field(name="Nickname", value=info['nickname'], inline=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
     else:
-        await interaction.response.send_message("Card not found.", ephemeral=True)
+        embed = discord.Embed(
+            description="Card not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_transfer", description="Transfer money to another card/nickname")
 async def bank_transfer(interaction: discord.Interaction, amount: int, to_card_or_nickname: str, message: str = ""):
     bank = load_bank()
     from_card, from_info = get_card_by_userid(bank, interaction.user.id)
     if not from_info:
-        await interaction.response.send_message("You don't have a card.", ephemeral=True)
+        embed = discord.Embed(
+            description="You don't have a card.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     if from_info["blocked"]:
-        await interaction.response.send_message("Your account is blocked.", ephemeral=True)
+        embed = discord.Embed(
+            description="Your account is blocked.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     if from_info["balance"] < amount:
-        await interaction.response.send_message("Insufficient funds.", ephemeral=True)
+        embed = discord.Embed(
+            description="Insufficient funds.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     to_card, to_info = bank.get(to_card_or_nickname), bank.get(to_card_or_nickname)
     if not to_info:
         to_card, to_info = get_card_by_nickname(bank, to_card_or_nickname)
     if not to_info:
-        await interaction.response.send_message("Recipient card not found.", ephemeral=True)
+        embed = discord.Embed(
+            description="Recipient card not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     if to_info["blocked"]:
-        await interaction.response.send_message("Recipient account is blocked.", ephemeral=True)
+        embed = discord.Embed(
+            description="Recipient account is blocked.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     from_info["balance"] -= amount
     to_info["balance"] += amount
     save_bank(bank)
-    await interaction.response.send_message(
-        f"Transferred {amount} to {to_info['nickname']} ({to_card}). Message: {message}", ephemeral=True
+    embed = discord.Embed(
+        title="Transfer Successful",
+        color=discord.Color.green()
     )
+    embed.add_field(name="Amount", value=f"{amount}", inline=True)
+    embed.add_field(name="To", value=f"{to_info['nickname']} (`{to_card}`)", inline=True)
+    if message:
+        embed.add_field(name="Message", value=message, inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_topup", description="Top up a player's account (banker only)")
 async def bank_topup(interaction: discord.Interaction, amount: int, card_or_nickname: str):
     banker_role = get_banker_role(interaction.guild)
     if not banker_role or banker_role not in interaction.user.roles:
-        await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
+        embed = discord.Embed(
+            description="Only bankers can use this command.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     bank = load_bank()
@@ -782,21 +850,40 @@ async def bank_topup(interaction: discord.Interaction, amount: int, card_or_nick
     if not info:
         card, info = get_card_by_nickname(bank, card_or_nickname)
     if not info:
-        await interaction.response.send_message("Card not found.", ephemeral=True)
+        embed = discord.Embed(
+            description="Card not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
     if info["blocked"]:
-        await interaction.response.send_message("Account is blocked.", ephemeral=True)
+        embed = discord.Embed(
+            description="Account is blocked.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     info["balance"] += amount
     save_bank(bank)
-    await interaction.response.send_message(f"Card {card} topped up by {amount}. New balance: {info['balance']}", ephemeral=True)
+    embed = discord.Embed(
+        title="Top Up Successful",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="Card", value=f"`{card}`", inline=True)
+    embed.add_field(name="Amount Added", value=f"{amount}", inline=True)
+    embed.add_field(name="New Balance", value=f"{info['balance']}", inline=True)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_block", description="Block a player's account (banker only)")
 async def bank_block(interaction: discord.Interaction, card_or_nickname: str):
     banker_role = get_banker_role(interaction.guild)
     if not banker_role or banker_role not in interaction.user.roles:
-        await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
+        embed = discord.Embed(
+            description="Only bankers can use this command.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     bank = load_bank()
@@ -804,18 +891,31 @@ async def bank_block(interaction: discord.Interaction, card_or_nickname: str):
     if not info:
         card, info = get_card_by_nickname(bank, card_or_nickname)
     if not info:
-        await interaction.response.send_message("Card not found.", ephemeral=True)
+        embed = discord.Embed(
+            description="Card not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     info["blocked"] = True
     save_bank(bank)
-    await interaction.response.send_message(f"Card {card} has been blocked.", ephemeral=True)
+    embed = discord.Embed(
+        title="Card Blocked",
+        description=f"Card `{card}` has been blocked.",
+        color=discord.Color.red()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_unlock", description="Unlock a blocked card (banker only)")
 async def bank_unlock(interaction: discord.Interaction, card_or_nickname: str):
     banker_role = get_banker_role(interaction.guild)
     if not banker_role or banker_role not in interaction.user.roles:
-        await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
+        embed = discord.Embed(
+            description="Only bankers can use this command.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     bank = load_bank()
@@ -823,16 +923,29 @@ async def bank_unlock(interaction: discord.Interaction, card_or_nickname: str):
     if not info:
         card, info = get_card_by_nickname(bank, card_or_nickname)
     if not info:
-        await interaction.response.send_message("Card not found.", ephemeral=True)
+        embed = discord.Embed(
+            description="Card not found.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     if not info["blocked"]:
-        await interaction.response.send_message("Card is not blocked.", ephemeral=True)
+        embed = discord.Embed(
+            description="Card is not blocked.",
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     info["blocked"] = False
     save_bank(bank)
-    await interaction.response.send_message(f"Card {card} has been unlocked.", ephemeral=True)
+    embed = discord.Embed(
+        title="Card Unlocked",
+        description=f"Card `{card}` has been unlocked.",
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_delete", description="Delete a card (user or banker)")
 async def bank_delete(interaction: discord.Interaction, card_or_nickname: str = None):
@@ -843,38 +956,70 @@ async def bank_delete(interaction: discord.Interaction, card_or_nickname: str = 
         if not info:
             card, info = get_card_by_nickname(bank, card_or_nickname)
         if not info:
-            await interaction.response.send_message("Card not found.", ephemeral=True)
+            embed = discord.Embed(
+                description="Card not found.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         if not banker_role and info["user_id"] != str(interaction.user.id):
-            await interaction.response.send_message("You can only delete your own card.", ephemeral=True)
+            embed = discord.Embed(
+                description="You can only delete your own card.",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
     else:
         card, info = get_card_by_userid(bank, interaction.user.id)
         if not info:
-            await interaction.response.send_message("You don't have a card to delete.", ephemeral=True)
+            embed = discord.Embed(
+                description="You don't have a card to delete.",
+                color=discord.Color.orange()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
     del bank[card]
     save_bank(bank)
-    await interaction.response.send_message(f"Card {card} has been deleted.", ephemeral=True)
+    embed = discord.Embed(
+        title="Card Deleted",
+        description=f"Card `{card}` has been deleted.",
+        color=discord.Color.red()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_list", description="List all cards (banker only)")
 async def bank_list(interaction: discord.Interaction):
     banker_role = discord.utils.get(interaction.user.roles, name=BANKER_ROLE_NAME)
     if not banker_role:
-        await interaction.response.send_message("Only bankers can use this command.", ephemeral=True)
+        embed = discord.Embed(
+            description="Only bankers can use this command.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
     bank = load_bank()
     if not bank:
-        await interaction.response.send_message("No cards found.", ephemeral=True)
+        embed = discord.Embed(
+            description="No cards found.",
+            color=discord.Color.orange()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
-    msg = "All cards:\n"
+    embed = discord.Embed(
+        title="All Cards",
+        color=discord.Color.blue()
+    )
     for card, info in bank.items():
         status = "Blocked" if info["blocked"] else "Active"
-        msg += f"Card: {card}, Nickname: {info['nickname']}, Balance: {info['balance']}, Status: {status}\n"
-    await interaction.response.send_message(msg, ephemeral=True)
+        embed.add_field(
+            name=f"Card: {card}",
+            value=f"Nickname: {info['nickname']}\nBalance: {info['balance']}\nStatus: {status}",
+            inline=False
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="bank_setroles", description="Set banker and citizen roles for the banking system")
 @commands.has_permissions(administrator=True)
@@ -895,10 +1040,13 @@ async def bank_setroles(
         "banker_role_id": banker_role.id,
         "citizen_role_id": citizen_role.id
     }
-    await interaction.response.send_message(
-        f"Banker role set to: {banker_role.mention}\nCitizen role set to: {citizen_role.mention}",
-        ephemeral=True
+    embed = discord.Embed(
+        title="Bank Roles Set",
+        color=discord.Color.green()
     )
+    embed.add_field(name="Banker Role", value=banker_role.mention, inline=False)
+    embed.add_field(name="Citizen Role", value=citizen_role.mention, inline=False)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 def get_banker_role(guild):

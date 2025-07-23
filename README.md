@@ -67,5 +67,3 @@ It supports multilingual features and is highly customizable for each server.
 - **Citizen Role:** Can create and use bank cards.
 
 Set these roles using `/setupadmin`, `/setuprating`, `/setup`, or `/bank_setroles`.
-
----
