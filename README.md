@@ -69,7 +69,3 @@ It supports multilingual features and is highly customizable for each server.
 Set these roles using `/setupadmin`, `/setuprating`, `/setup`, or `/bank_setroles`.
 
 ---
-
-## Language
-
-Set the bot language for your server:
