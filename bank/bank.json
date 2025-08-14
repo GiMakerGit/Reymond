@@ -2,7 +2,67 @@
     "100000": {
         "user_id": "777518867386859531",
         "nickname": "<@777518867386859531>",
-        "balance": 2,
+        "balance": 10,
+        "blocked": false
+    },
+    "100001": {
+        "user_id": "655062404685889557",
+        "nickname": "Fel1xium",
+        "balance": 12,
+        "blocked": false
+    },
+    "100002": {
+        "user_id": "1192426849456898121",
+        "nickname": "sotokoul",
+        "balance": 10,
+        "blocked": false
+    },
+    "100003": {
+        "user_id": "689919944280113269",
+        "nickname": "MENDIWHITE",
+        "balance": 0,
+        "blocked": false
+    },
+    "100004": {
+        "user_id": "799962496625541140",
+        "nickname": "Toxin435",
+        "balance": 0,
+        "blocked": false
+    },
+    "100005": {
+        "user_id": "911245683619659877",
+        "nickname": "Pahley",
+        "balance": 0,
+        "blocked": false
+    },
+    "100006": {
+        "user_id": "830135454287921182",
+        "nickname": "_Smusken_",
+        "balance": 0,
+        "blocked": false
+    },
+    "100007": {
+        "user_id": "1124359291311239179",
+        "nickname": "Ja1l_",
+        "balance": 0,
+        "blocked": false
+    },
+    "100008": {
+        "user_id": "1021998646943813674",
+        "nickname": "ACE0_0",
+        "balance": 0,
+        "blocked": false
+    },
+    "100009": {
+        "user_id": "1146092312158535720",
+        "nickname": "merryva",
+        "balance": 0,
+        "blocked": false
+    },
+    "100010": {
+        "user_id": "807990173982785627",
+        "nickname": "PisiaPopa",
+        "balance": 0,
         "blocked": false
     }
 }
